@@ -70,27 +70,58 @@ class NFCService {
   }
 
   /// Writes a simple text record to the tag.
-  static Future<void> writeNdef(String text) async {
+  static Future<bool> writeNdef(String text) async {
     try {
+      // Wait for NFC tag to be detected
       await flutter_nfc.FlutterNfcKit.poll();
-      final List<int> payload = _buildTextPayload(text);
 
-      Uint8List _toExplicitUint8List(List<int> bytes) => Uint8List.fromList(bytes);
+      // Build NDEF text payload
+      final payload = _buildTextPayload(text);
 
+      // Write the record
       await flutter_nfc.FlutterNfcKit.writeNDEFRecords([
         flutter_nfc.NDEFRecord(
           tnf: flutter_nfc.TypeNameFormat.nfcWellKnown,
-          type: _toExplicitUint8List(utf8.encode('T')),
-          payload: _toExplicitUint8List(payload),
+          type: Uint8List.fromList(utf8.encode('T')), // "T" = text record
+          payload: Uint8List.fromList(payload),
         ),
       ]);
 
-      await flutter_nfc.FlutterNfcKit.finish();
+      print("✅ NFC write complete");
+      return true; // success
     } catch (e) {
-      print('NFC write error: $e');
-      await flutter_nfc.FlutterNfcKit.finish();
+      print('❌ NFC write error: $e');
+      return false; // failed
+    } finally {
+      try {
+        await flutter_nfc.FlutterNfcKit.finish();
+      } catch (e) {
+        print("⚠️ NFC finish error: $e");
+      }
     }
   }
+
+  // static Future<void> writeNdef(String text) async {
+  //   try {
+  //     await flutter_nfc.FlutterNfcKit.poll();
+  //     final List<int> payload = _buildTextPayload(text);
+  //
+  //     Uint8List _toExplicitUint8List(List<int> bytes) => Uint8List.fromList(bytes);
+  //
+  //     await flutter_nfc.FlutterNfcKit.writeNDEFRecords([
+  //       flutter_nfc.NDEFRecord(
+  //         tnf: flutter_nfc.TypeNameFormat.nfcWellKnown,
+  //         type: _toExplicitUint8List(utf8.encode('T')),
+  //         payload: _toExplicitUint8List(payload),
+  //       ),
+  //     ]);
+  //
+  //     await flutter_nfc.FlutterNfcKit.finish();
+  //   } catch (e) {
+  //     print('NFC write error: $e');
+  //     await flutter_nfc.FlutterNfcKit.finish();
+  //   }
+  // }
 }
 
 List<int> _buildTextPayload(String text) {

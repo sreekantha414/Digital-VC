@@ -52,6 +52,17 @@ class DBService {
     return db.delete('visiting_cards', where: 'id = ?', whereArgs: [id]);
   }
 
+  static Future<VisitingCard?> getVisitingCardById(int id) async {
+    final db = await database;
+
+    final List<Map<String, dynamic>> results = await db.query('visiting_cards', where: 'id = ?', whereArgs: [id], limit: 1);
+
+    if (results.isNotEmpty) {
+      return VisitingCard.fromMap(results.first);
+    }
+    return null; // Not found
+  }
+
   static Future<int> updateVisitingCard(VisitingCard card) async {
     final db = await database;
     if (card.id == null) {

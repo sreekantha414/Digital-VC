@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:qr_code_scanner/qr_code_scanner.dart';
-import '../services/qr_service.dart';
+import '../Services/qr_service.dart';
 
 class QRScannerScreen extends StatefulWidget {
   @override

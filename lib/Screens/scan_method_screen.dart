@@ -22,42 +22,94 @@ class _ScanMethodsScreenState extends State<ScanMethodsScreen> {
 
   void _onData(String raw, {required String method}) async {
     try {
-      // Try decoding JSON string (even if it's nested once)
+      // Decode JSON (handle double-encoded case)
       dynamic decoded = json.decode(raw);
       if (decoded is String) {
-        decoded = json.decode(decoded); // handle double-encoded
+        decoded = json.decode(decoded);
       }
 
       final map = Map<String, dynamic>.from(decoded);
       final visitingCard = VisitingCard.fromMap(map);
 
       final metadata = await AppHelper.getScanMetadata(method);
-      logger.w(metadata);
       final cardWithMetadata = visitingCard.copyWith(
         type: CardType.other,
         extras: [
           ...visitingCard.extras,
-          "Scanned via: ${metadata['scan_method']}",
-          "Time: ${metadata['timestamp']}",
+          "Scanned via: ${metadata['scan_method'] ?? 'Unknown'}",
+          "Time: ${metadata['timestamp'] ?? 'Unknown'}",
           if (metadata['location'] != null) "Location: ${metadata['location']['latitude']}, ${metadata['location']['longitude']}",
         ],
       );
       logger.w(cardWithMetadata);
-      print(cardWithMetadata);
-      await DBService.insertVisitingCard(cardWithMetadata);
-
-      // await DBService.insertVisitingCard(visitingCard);
-
-      Navigator.push(context, MaterialPageRoute(builder: (_) => DisplayProfileScreen(card: visitingCard)));
+      // Check if the card exists
+      final existingCard = await DBService.getVisitingCardById(cardWithMetadata.id ?? 0);
+      if (existingCard != null) {
+        await DBService.updateVisitingCard(cardWithMetadata);
+      } else {
+        await DBService.insertVisitingCard(cardWithMetadata);
+      }
+      Navigator.push(context, MaterialPageRoute(builder: (_) => DisplayProfileScreen(card: cardWithMetadata)));
     } catch (e) {
       print('Error decoding QR/AI data: $e');
       print('Raw data: $raw');
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to parse and save profile.')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to parse and save profile.')));
     }
   }
 
+  // void _onData(String raw, {required String method}) async {
+  //   try {
+  //     // Try decoding JSON string (even if it's nested once)
+  //     dynamic decoded = json.decode(raw);
+  //     if (decoded is String) {
+  //       decoded = json.decode(decoded); // handle double-encoded
+  //     }
+  //
+  //     final map = Map<String, dynamic>.from(decoded);
+  //     final visitingCard = VisitingCard.fromMap(map);
+  //
+  //     final metadata = await AppHelper.getScanMetadata(method);
+  //     logger.w(metadata);
+  //     final cardWithMetadata = visitingCard.copyWith(
+  //       type: CardType.other,
+  //       extras: [
+  //         ...visitingCard.extras,
+  //         "Scanned via: ${metadata['scan_method']}",
+  //         "Time: ${metadata['timestamp']}",
+  //         if (metadata['location'] != null) "Location: ${metadata['location']['latitude']}, ${metadata['location']['longitude']}",
+  //       ],
+  //     );
+  //     logger.w(cardWithMetadata);
+  //     print(cardWithMetadata);
+  //     await DBService.insertVisitingCard(cardWithMetadata);
+  //
+  //     // await DBService.insertVisitingCard(visitingCard);
+  //
+  //     Navigator.push(context, MaterialPageRoute(builder: (_) => DisplayProfileScreen(card: visitingCard)));
+  //   } catch (e) {
+  //     print('Error decoding QR/AI data: $e');
+  //     print('Raw data: $raw');
+  //     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to parse and save profile.')));
+  //   }
+  // }
+
+  // Future<void> _scanNFC() async {
+  //   setState(() => _loading = true);
+  //   final isAvailable = await NFCService.isAvailable();
+  //   if (!isAvailable) {
+  //     setState(() => _loading = false);
+  //     _showDialog("NFC Unavailable", "Your device doesn't support NFC or it's turned off.");
+  //     return;
+  //   }
+  //
+  //   final raw = await NFCService.readNdef();
+  //   logger.w(raw);
+  //   setState(() => _loading = false);
+  //   if (raw != null) _onData(raw, method: 'NFC');
+  // }
   Future<void> _scanNFC() async {
     setState(() => _loading = true);
+
     final isAvailable = await NFCService.isAvailable();
     if (!isAvailable) {
       setState(() => _loading = false);
@@ -65,9 +117,37 @@ class _ScanMethodsScreenState extends State<ScanMethodsScreen> {
       return;
     }
 
+    // Try reading NFC tag
     final raw = await NFCService.readNdef();
-    setState(() => _loading = false);
-    if (raw != null) _onData(raw, method: 'NFC');
+    logger.w("NFC Raw Read: $raw");
+
+    if (raw != null && raw.startsWith("VCARD_APP::")) {
+      // Visiting card found → parse & save
+      final jsonData = raw.replaceFirst("VCARD_APP::", "");
+      setState(() => _loading = false);
+      _onData(jsonData, method: 'NFC');
+    } else {
+      // No visiting card found → write my own card
+      final allCards = await DBService.getAllVisitingCards();
+      final userCards = allCards.where((card) => card.type == CardType.user);
+
+      if (userCards.first == null) {
+        setState(() => _loading = false);
+        _showDialog("No Card Found", "Please create your own visiting card first.");
+        return;
+      }
+
+      final jsonCardData = jsonEncode(userCards.first.toMap());
+      final writeSuccess = await NFCService.writeNdef("VCARD_APP::$jsonCardData");
+
+      setState(() => _loading = false);
+
+      // if (writeSuccess) {
+      //   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("✅ Visiting card written to NFC tag")));
+      // } else {
+      //   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("❌ Failed to write visiting card to NFC tag")));
+      // }
+    }
   }
 
   Future<void> _scanCardImage({required bool fromGallery}) async {

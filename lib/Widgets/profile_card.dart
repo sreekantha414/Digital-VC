@@ -134,7 +134,8 @@ class _ProfileCardState extends State<ProfileCard> {
                 Text("Scan to View Profile", style: TextStyle(fontWeight: FontWeight.w600)),
                 const SizedBox(height: 10),
                 QrImageView(
-                  data: json.encode(widget.profile.toMap()),
+                  data: "https://e60b61d2dafc.ngrok-free.app",
+                  // data: json.encode(widget.profile.toMap()),
                   size: 290,
                   version: QrVersions.auto,
                   backgroundColor: Colors.transparent,
